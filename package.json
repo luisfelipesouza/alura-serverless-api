@@ -1,0 +1,14 @@
+{
+    "name": "delete-test-01",
+    "description": "delete-test-01-description",
+    "version": "0.0.1",
+    "private": true,
+    "dependencies": {
+        "aws-sdk": "^2.799.0",
+        "uuid": "^8.3.2"
+    },
+    "devDependencies": {},
+    "scripts": {
+        "test": "jest"
+    }
+}

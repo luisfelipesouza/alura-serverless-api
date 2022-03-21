@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: aluramed-api
+
+Transform:
+- AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Runtime: nodejs14.x
+    Timeout: 100
+    MemorySize: 128
+    Environment:
+        Variables:
+          PACIENTES_TABLE: !Ref PacientesTable
+
+Resources:
+  listarPacientesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/pacientes.listar  
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PacientesTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /pacientes
+            Method: GET
+
+  obterPacienteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/pacientes.obter  
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PacientesTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /pacientes/{pacienteId}
+            Method: GET
+
+  cadastrarPacienteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/pacientes.cadastrar  
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PacientesTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /pacientes
+            Method: POST
+
+  atualizarPacienteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/pacientes.atualizar  
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PacientesTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /pacientes/{pacienteId}
+            Method: PUT
+
+  excluirPacienteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/pacientes.excluir  
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PacientesTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /pacientes/{pacienteId}
+            Method: DELETE
+  
+  PacientesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PACIENTES_TABLE
+      AttributeDefinitions:
+        - AttributeName: usuario_id
+          AttributeType: S
+        - AttributeName: paciente_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: usuario_id
+          KeyType: HASH
+        - AttributeName: paciente_id
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1  
+
+Outputs:
+  WebEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"

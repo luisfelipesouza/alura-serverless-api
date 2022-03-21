@@ -1,0 +1,28 @@
+{
+    "TableName": "PACIENTES_TABLE",
+    "KeySchema": [
+      {
+        "KeyType": "HASH",
+        "AttributeName": "usuario_id"
+      },
+      {
+        "KeyType": "RANGE",
+        "AttributeName": "paciente_id"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "usuario_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "paciente_id",
+        "AttributeType": "S"
+      }
+    ],
+    "BillingMode": "PROVISIONED",
+    "ProvisionedThroughput": {
+      "ReadCapacityUnits": 2,
+      "WriteCapacityUnits": 2
+    }
+  }
