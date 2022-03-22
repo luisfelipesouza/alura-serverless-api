@@ -4,6 +4,10 @@ Description: aluramed-api
 Transform:
 - AWS::Serverless-2016-10-31
 
+Parameters:
+  CognitoArn:
+    Type: String
+
 Globals:
   Function:
     Runtime: nodejs14.x
@@ -19,14 +23,14 @@ Resources:
     Properties:
       Name: aluramed-api
       StageName: Prod
+      Cors:
+         AllowMethods: "'*'"
+         AllowHeaders: "'*'"
+         AllowOrigin: "'*'"
       Auth:
         Authorizers:
-          LambdaTokenAuth:
-            FunctionArn:
-              Fn::GetAtt:
-                - autorizadorFunction
-                - Arn
-        DefaultAuthorizer: LambdaTokenAuth
+          CognitoAuthorizer:
+            UserPoolArn: !Ref CognitoArn
 
   listarPacientesFunction:
     Type: AWS::Serverless::Function
@@ -43,6 +47,8 @@ Resources:
             Method: GET
             RestApiId:
               Ref: Api
+            Auth:
+              Authorizer: CognitoAuthorizer
 
   obterPacienteFunction:
     Type: AWS::Serverless::Function
@@ -59,6 +65,8 @@ Resources:
             Method: GET
             RestApiId:
               Ref: Api
+            Auth:
+              Authorizer: CognitoAuthorizer
 
   cadastrarPacienteFunction:
     Type: AWS::Serverless::Function
@@ -75,6 +83,8 @@ Resources:
             Method: POST
             RestApiId:
               Ref: Api
+            Auth:
+              Authorizer: CognitoAuthorizer
 
   atualizarPacienteFunction:
     Type: AWS::Serverless::Function
@@ -91,6 +101,8 @@ Resources:
             Method: PUT
             RestApiId:
               Ref: Api
+            Auth:
+              Authorizer: CognitoAuthorizer
 
   excluirPacienteFunction:
     Type: AWS::Serverless::Function
@@ -107,12 +119,9 @@ Resources:
             Method: DELETE
             RestApiId:
               Ref: Api
+            Auth:
+              Authorizer: CognitoAuthorizer
 
-  autorizadorFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: src/autorizador.autorizar
-  
   PacientesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -132,6 +141,6 @@ Resources:
         WriteCapacityUnits: 1  
 
 Outputs:
-  WebEndpoint:
+  ApiEndpoint:
     Description: "API Gateway endpoint URL for Prod stage"
     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/Prod/"

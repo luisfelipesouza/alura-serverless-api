@@ -6,5 +6,6 @@ stack_name = "alura-med"
 s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-4ej6qnzs28na"
 s3_prefix = "alura-med"
 region = "us-east-2"
+parameter_overrides = "CognitoArn=\"arn:aws:cognito-idp:us-east-2:156412017075:userpool/us-east-2_jVgvm3X8Q\""
 capabilities = "CAPABILITY_IAM"
 image_repositories = []
