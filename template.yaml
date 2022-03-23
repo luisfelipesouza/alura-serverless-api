@@ -1,12 +1,14 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: aluramed-api
-
-Transform:
-- AWS::Serverless-2016-10-31
+Transform: AWS::Serverless-2016-10-31
 
 Parameters:
-  CognitoArn:
+  deploymentEnvironment:
     Type: String
+    Default: prod
+    AllowedValues:
+      - prod
+      - dev
 
 Globals:
   Function:
@@ -18,19 +20,31 @@ Globals:
           PACIENTES_TABLE: !Ref PacientesTable
 
 Resources:
-  Api:
+  ApiGatewayApi:
     Type: AWS::Serverless::Api
     Properties:
       Name: aluramed-api
-      StageName: Prod
+      StageName: !Ref deploymentEnvironment
       Cors:
-         AllowMethods: "'*'"
-         AllowHeaders: "'*'"
-         AllowOrigin: "'*'"
+        #AllowCredentials: true
+        AllowOrigin: "'*'"
+        AllowHeaders: "'*'"
+        AllowMethods: "'*'"
       Auth:
+        AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
           CognitoAuthorizer:
-            UserPoolArn: !Ref CognitoArn
+            UserPoolArn: !GetAtt "UserPool.Arn"
+        DefaultAuthorizer: CognitoAuthorizer
+      
+  GatewayResponseDefault4XX:
+    Type: 'AWS::ApiGateway::GatewayResponse'
+    Properties:
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+      ResponseType: DEFAULT_4XX
+      RestApiId: !Ref ApiGatewayApi
 
   listarPacientesFunction:
     Type: AWS::Serverless::Function
@@ -45,10 +59,7 @@ Resources:
           Properties:
             Path: /pacientes
             Method: GET
-            RestApiId:
-              Ref: Api
-            Auth:
-              Authorizer: CognitoAuthorizer
+            RestApiId: !Ref ApiGatewayApi
 
   obterPacienteFunction:
     Type: AWS::Serverless::Function
@@ -63,10 +74,7 @@ Resources:
           Properties:
             Path: /pacientes/{pacienteId}
             Method: GET
-            RestApiId:
-              Ref: Api
-            Auth:
-              Authorizer: CognitoAuthorizer
+            RestApiId: !Ref ApiGatewayApi
 
   cadastrarPacienteFunction:
     Type: AWS::Serverless::Function
@@ -81,10 +89,7 @@ Resources:
           Properties:
             Path: /pacientes
             Method: POST
-            RestApiId:
-              Ref: Api
-            Auth:
-              Authorizer: CognitoAuthorizer
+            RestApiId: !Ref ApiGatewayApi
 
   atualizarPacienteFunction:
     Type: AWS::Serverless::Function
@@ -99,10 +104,7 @@ Resources:
           Properties:
             Path: /pacientes/{pacienteId}
             Method: PUT
-            RestApiId:
-              Ref: Api
-            Auth:
-              Authorizer: CognitoAuthorizer
+            RestApiId: !Ref ApiGatewayApi
 
   excluirPacienteFunction:
     Type: AWS::Serverless::Function
@@ -117,10 +119,7 @@ Resources:
           Properties:
             Path: /pacientes/{pacienteId}
             Method: DELETE
-            RestApiId:
-              Ref: Api
-            Auth:
-              Authorizer: CognitoAuthorizer
+            RestApiId: !Ref ApiGatewayApi
 
   PacientesTable:
     Type: AWS::DynamoDB::Table
@@ -138,9 +137,151 @@ Resources:
           KeyType: RANGE
       ProvisionedThroughput:
         ReadCapacityUnits: 1
-        WriteCapacityUnits: 1  
+        WriteCapacityUnits: 1 
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UsernameConfiguration: 
+        CaseSensitive: false
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      UserPoolName: !Sub "alura-med-user-pool-${deploymentEnvironment}"
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: false
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      AllowedOAuthFlowsUserPoolClient: true
+      CallbackURLs:
+        - http://localhost:3001
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - phone
+        - email
+        - openid
+        - profile
+      SupportedIdentityProviders:
+        - COGNITO
+      ExplicitAuthFlows:
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        - ALLOW_CUSTOM_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub  "alura-med-${deploymentEnvironment}"
+      UserPoolId: !Ref UserPool
+      
+  # Creates a federeated Identity pool
+  IdentityPool:
+    Type: "AWS::Cognito::IdentityPool"
+    Properties:
+      IdentityPoolName: !Sub "alura-med-identity-pool-${deploymentEnvironment}"
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders: 
+        - ClientId: !Ref UserPoolClient
+          ProviderName: !GetAtt UserPool.ProviderName
+
+  # Create a role for unauthorized acces to AWS resources. 
+  # Very limited access. Only allows users in the previously created Identity Pool
+  CognitoUnAuthorizedRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal: 
+              Federated: "cognito-identity.amazonaws.com"
+            Action: 
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals: 
+                "cognito-identity.amazonaws.com:aud": !Ref IdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": unauthenticated
+      Policies:
+        - PolicyName: "CognitoUnauthorizedPolicy"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                Resource: "*"
+
+  # Create a role for authorized acces to AWS resources. 
+  # Control what your user can access. This example only allows Lambda invokation
+  # Only allows users in the previously created Identity Pool
+  CognitoAuthorizedRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal: 
+              Federated: "cognito-identity.amazonaws.com"
+            Action: 
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals: 
+                "cognito-identity.amazonaws.com:aud": !Ref IdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": authenticated
+      Policies:
+        - PolicyName: "CognitoAuthorizedPolicy"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                  - "cognito-identity:*"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "execute-api:Invoke"
+                Resource: !Sub "arn:aws:execute-api:${AWS::Region}:*:${ApiGatewayApi}/*/*/*"
+    
+  # Assigns the roles to the Identity Pool
+  IdentityPoolRoleMapping:
+    Type: "AWS::Cognito::IdentityPoolRoleAttachment"
+    Properties:
+      IdentityPoolId: !Ref IdentityPool
+      Roles:
+        authenticated: !GetAtt "CognitoAuthorizedRole.Arn"
+        unauthenticated: !GetAtt "CognitoUnAuthorizedRole.Arn"
 
 Outputs:
+  CognitoID:
+    Description: The Cognito UserPool ID
+    Value: !Ref UserPool
+  CognitoClientID:
+    Description: The Cognito UserPool Client ID
+    Value: !Ref UserPoolClient
+  IdentityPoolID:
+    Description: The Cognito IdentityPool ID
+    Value: !Ref IdentityPool
   ApiEndpoint:
     Description: "API Gateway endpoint URL for Prod stage"
-    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/${deploymentEnvironment}/"

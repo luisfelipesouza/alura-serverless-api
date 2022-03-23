@@ -5,8 +5,8 @@ const { v4: uuidv4 } = require("uuid");
 
 const dynamodbOfflineOptions = {
   region: "localhost",
-  endpoint: "http://localhost:8000"
-}
+  endpoint: "http://localhost:8000",
+};
 
 const isOffline = () => process.env.IS_OFFLINE;
 
@@ -19,25 +19,33 @@ const params = {
 };
 
 function handlerResponse(statusCode, body) {
-  let response = { statusCode }
+  let response = {
+    statusCode,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "*",
+      "Access-Control-Allow-Credentials": true,
+      "Access-Control-Allow-Headers": "*",
+    },
+  };
 
   if (body) {
-    response['body'] = body
+    response["body"] = body;
   }
 
-  return response
+  return response;
 }
 
 module.exports.listar = async (event) => {
   try {
-    const usuario_id = '123'
+    const usuario_id = event.requestContext.authorizer.claims['cognito:username'];
 
     const queryString = {
       limit: 5,
-      ...event.queryStringParameters
-    }
+      ...event.queryStringParameters,
+    };
 
-    const { limit, next } = queryString
+    const { limit, next } = queryString;
 
     let localParams = {
       ...params,
@@ -45,29 +53,29 @@ module.exports.listar = async (event) => {
       ExpressionAttributeValues: {
         ":usuario_id": usuario_id,
       },
-      Limit: limit
-    }
+      Limit: limit,
+    };
 
     if (next) {
       localParams.ExclusiveStartKey = {
         usuario_id: usuario_id,
-        paciente_id: next
-      }
+        paciente_id: next,
+      };
     }
 
     let data = await dynamoDb.scan(localParams).promise();
 
-    let nextToken = data.LastEvaluatedKey != undefined
-      ? data.LastEvaluatedKey.paciente_id
-      : null;
+    let nextToken =
+      data.LastEvaluatedKey != undefined
+        ? data.LastEvaluatedKey.paciente_id
+        : null;
 
     const result = {
       items: data.Items,
-      next_token: nextToken
-    }
+      next_token: nextToken,
+    };
 
-    return handlerResponse(200, JSON.stringify(result))
-
+    return handlerResponse(200, JSON.stringify(result));
   } catch (err) {
     console.log("Error", err);
 
@@ -77,31 +85,35 @@ module.exports.listar = async (event) => {
         error: err.name ? err.name : "Exception",
         message: err.message ? err.message : "Unknown error",
       })
-    )
+    );
   }
 };
 
 module.exports.obter = async (event) => {
   try {
     const { pacienteId } = event.pathParameters;
+    const usuario_id = event.requestContext.authorizer.claims['cognito:username'];
 
     const data = await dynamoDb
       .get({
         ...params,
         Key: {
-          usuario_id: '123',
+          usuario_id: usuario_id,
           paciente_id: pacienteId,
         },
       })
       .promise();
 
     if (!data.Item) {
-      return handlerResponse(404, JSON.stringify({ error: "Paciente não existe" }, null, 2))
+      return handlerResponse(
+        404,
+        JSON.stringify({ error: "Paciente não existe" }, null, 2)
+      );
     }
 
     const paciente = data.Item;
 
-    return handlerResponse(200, JSON.stringify(paciente, null, 2))
+    return handlerResponse(200, JSON.stringify(paciente, null, 2));
   } catch (err) {
     console.log("Error", err);
 
@@ -111,20 +123,21 @@ module.exports.obter = async (event) => {
         error: err.name ? err.name : "Exception",
         message: err.message ? err.message : "Unknown error",
       })
-    )
+    );
   }
 };
 
 module.exports.cadastrar = async (event) => {
   try {
     const timestamp = new Date().getTime();
+    const usuario_id = event.requestContext.authorizer.claims['cognito:username']
 
     let dados = JSON.parse(event.body);
 
     const { nome, data_nascimento, email, telefone } = dados;
 
     const paciente = {
-      usuario_id: '123',
+      usuario_id: usuario_id,
       paciente_id: uuidv4(),
       nome,
       data_nascimento,
@@ -142,7 +155,7 @@ module.exports.cadastrar = async (event) => {
       })
       .promise();
 
-    return handlerResponse(201, null)
+    return handlerResponse(201, null);
   } catch (err) {
     console.log("Error", err);
 
@@ -152,15 +165,16 @@ module.exports.cadastrar = async (event) => {
         error: err.name ? err.name : "Exception",
         message: err.message ? err.message : "Unknown error",
       })
-    )
+    );
   }
 };
 
 module.exports.atualizar = async (event) => {
-  const { pacienteId } = event.pathParameters
+  const { pacienteId } = event.pathParameters;
 
   try {
     const timestamp = new Date().getTime();
+    const usuario_id = event.requestContext.authorizer.claims['cognito:username']
 
     let dados = JSON.parse(event.body);
 
@@ -170,24 +184,24 @@ module.exports.atualizar = async (event) => {
       .update({
         ...params,
         Key: {
-          usuario_id: '123',
-          paciente_id: pacienteId
+          usuario_id: usuario_id,
+          paciente_id: pacienteId,
         },
         UpdateExpression:
-          'SET nome = :nome, data_nascimento = :dt, email = :email,'
-          + ' telefone = :telefone, atualizado_em = :atualizado_em',
-        ConditionExpression: 'attribute_exists(paciente_id)',
+          "SET nome = :nome, data_nascimento = :dt, email = :email," +
+          " telefone = :telefone, atualizado_em = :atualizado_em",
+        ConditionExpression: "attribute_exists(paciente_id)",
         ExpressionAttributeValues: {
-          ':nome': nome,
-          ':dt': data_nascimento,
-          ':email': email,
-          ':telefone': telefone,
-          ':atualizado_em': timestamp
-        }
+          ":nome": nome,
+          ":dt": data_nascimento,
+          ":email": email,
+          ":telefone": telefone,
+          ":atualizado_em": timestamp,
+        },
       })
-      .promise()
+      .promise();
 
-    return handlerResponse(204, null)
+    return handlerResponse(204, null);
   } catch (err) {
     console.log("Error", err);
 
@@ -195,35 +209,33 @@ module.exports.atualizar = async (event) => {
     let message = err.message ? err.message : "Unknown error";
     let statusCode = err.statusCode ? err.statusCode : 500;
 
-    if (error == 'ConditionalCheckFailedException') {
-      error = 'Paciente não existe';
+    if (error == "ConditionalCheckFailedException") {
+      error = "Paciente não existe";
       message = `Recurso com o ID ${pacienteId} não existe e não pode ser atualizado`;
       statusCode = 404;
     }
 
-    return handlerResponse(
-      statusCode,
-      JSON.stringify({ error, message })
-    )
+    return handlerResponse(statusCode, JSON.stringify({ error, message }));
   }
 };
 
-module.exports.excluir = async event => {
-  const { pacienteId } = event.pathParameters
+module.exports.excluir = async (event) => {
+  const { pacienteId } = event.pathParameters;
+  const usuario_id = event.requestContext.authorizer.claims['cognito:username']
 
   try {
     await dynamoDb
       .delete({
         ...params,
         Key: {
-          usuario_id: '123',
-          paciente_id: pacienteId
+          usuario_id: usuario_id,
+          paciente_id: pacienteId,
         },
-        ConditionExpression: 'attribute_exists(paciente_id)'
+        ConditionExpression: "attribute_exists(paciente_id)",
       })
-      .promise()
+      .promise();
 
-    return handlerResponse(204, null)
+    return handlerResponse(204, null);
   } catch (err) {
     console.log("Error", err);
 
@@ -231,15 +243,12 @@ module.exports.excluir = async event => {
     let message = err.message ? err.message : "Unknown error";
     let statusCode = err.statusCode ? err.statusCode : 500;
 
-    if (error == 'ConditionalCheckFailedException') {
-      error = 'Paciente não existe';
+    if (error == "ConditionalCheckFailedException") {
+      error = "Paciente não existe";
       message = `Recurso com o ID ${pacienteId} não existe e não pode ser atualizado`;
       statusCode = 404;
     }
 
-    return handlerResponse(
-      statusCode,
-      JSON.stringify({ error, message })
-    )
+    return handlerResponse(statusCode, JSON.stringify({ error, message }));
   }
-}
+};
